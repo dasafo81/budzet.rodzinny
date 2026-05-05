@@ -3,7 +3,7 @@ import AddTransactionForm from './AddTransactionForm'
 import TxItem from './TxItem'
 import { CAT_COLORS, CAT_ICONS, fmt } from '../constants'
 
-export default function Overview({ user, monthTransactions, monthLabel, changeMonth, addTransaction, deleteTransaction }) {
+export default function Overview({ user, monthTransactions, monthLabel, changeMonth, addTransaction, updateTransaction, deleteTransaction }) {
   const income   = monthTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
   const expenses = monthTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
   const savings  = monthTransactions.filter(t => t.type === 'savings').reduce((s, t) => s + t.amount, 0)
@@ -47,7 +47,7 @@ export default function Overview({ user, monthTransactions, monthLabel, changeMo
             {monthTransactions.length === 0
               ? <div className="empty">Brak transakcji w tym miesiącu</div>
               : monthTransactions.slice(0, 15).map(tx => (
-                  <TxItem key={tx.id} tx={tx} userId={user.id} onDelete={deleteTransaction} />
+                  <TxItem key={tx.id} tx={tx} userId={user.id} onEdit={updateTransaction} onDelete={deleteTransaction} />
                 ))}
           </div>
         </div>

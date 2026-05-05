@@ -75,6 +75,13 @@ export default function App() {
     return true
   }, [user, showToast])
 
+  const updateTransaction = useCallback(async (id, updates) => {
+    const { error } = await sb.from('transactions').update(updates).eq('id', id)
+    if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
+    showToast('Zaktualizowano')
+    return true
+  }, [showToast])
+
   const deleteTransaction = useCallback(async (id) => {
     const { error } = await sb.from('transactions').delete().eq('id', id)
     if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
@@ -118,7 +125,7 @@ export default function App() {
   if (loading) return <div className="center-screen">Ładowanie...</div>
   if (!user) return <Auth />
 
-  const panelProps = { user, transactions, monthTransactions, fixedExpenses, viewDate, monthLabel, changeMonth, addTransaction, deleteTransaction, saveFixed, deleteFixed, showToast }
+  const panelProps = { user, transactions, monthTransactions, fixedExpenses, viewDate, monthLabel, changeMonth, addTransaction, updateTransaction, deleteTransaction, saveFixed, deleteFixed, showToast }
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>

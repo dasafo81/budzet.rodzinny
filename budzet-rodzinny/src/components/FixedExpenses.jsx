@@ -46,7 +46,7 @@ function FxModal({ onSave, onClose, preGroup }) {
   )
 }
 
-function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddNew }) {
+function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddSingleToTx, onAddNew }) {
   const [open, setOpen] = useState(true)
   const [localAmounts, setLocalAmounts] = useState({})
   const [saving, setSaving] = useState({})
@@ -84,6 +84,7 @@ function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddNew
                 <button className="btn-sm" disabled={saving[item.name]} onClick={() => handleSave(item)}>
                   {saving[item.name] ? '...' : 'Zapisz'}
                 </button>
+                <button className="btn-sm" onClick={() => onAddSingleToTx(group, item)} title="Dodaj do transakcji">+</button>
                 <input type="checkbox" defaultChecked={isPaid(item.name)}
                   onChange={e => setPaid(item.name, e.target.checked)}
                   style={{ width:20, height:20, accentColor:'var(--accent)', cursor:'pointer' }} />
@@ -131,6 +132,21 @@ export default function FixedExpenses({ user, fixedExpenses, monthLabel, changeM
     if (ok) showToast(`Dodano ${rows.length} pozycji`)
   }
 
+  const handleAddSingleToTx = async (group, item) => {
+    if (!item.amount || item.amount <= 0) { showToast('Kwota musi być większa od 0', 'error'); return }
+    const row = {
+      name: item.name,
+      amount: item.amount,
+      date: new Date().toISOString().split('T')[0],
+      type: group === 'OSZCZĘDZANIE' ? 'savings' : 'expense',
+      category: group,
+      subcategory: item.name,
+      payment_source: 'Porters',
+    }
+    const ok = await addTransaction(row)
+    if (ok) showToast(`Dodano: ${item.name}`)
+  }
+
   return (
     <div>
       <MonthNav label={monthLabel} onChange={changeMonth} />
@@ -145,7 +161,7 @@ export default function FixedExpenses({ user, fixedExpenses, monthLabel, changeM
       {Object.entries(grouped).map(([group, items]) => (
         <FxGroup key={group} group={group} items={items} monthKey={monthKey}
           onSave={saveFixed} onDelete={deleteFixed}
-          onAddToTx={handleAddToTx} onAddNew={g => setModal(g)} />
+          onAddToTx={handleAddToTx} onAddSingleToTx={handleAddSingleToTx} onAddNew={g => setModal(g)} />
       ))}
 
       {fixedExpenses.length === 0 && <div className="empty">Brak stałych wydatków. Dodaj pierwszą pozycję.</div>}

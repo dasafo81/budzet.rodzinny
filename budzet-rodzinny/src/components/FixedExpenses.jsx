@@ -46,15 +46,12 @@ function FxModal({ onSave, onClose, preGroup }) {
   )
 }
 
-function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddSingleToTx, onAddNew }) {
+function FxGroup({ group, items, onSave, onDelete, onAddToTx, onAddSingleToTx, onAddNew }) {
   const [open, setOpen] = useState(true)
   const [localAmounts, setLocalAmounts] = useState({})
   const [saving, setSaving] = useState({})
 
   const total = items.reduce((s, i) => s + (parseFloat(i.amount) || 0), 0)
-
-  const isPaid = (name) => localStorage.getItem(`paid_${monthKey}_${group}_${name}`) === '1'
-  const setPaid = (name, val) => localStorage.setItem(`paid_${monthKey}_${group}_${name}`, val ? '1' : '0')
 
   const handleSave = async (item) => {
     const val = localAmounts[item.name] !== undefined ? localAmounts[item.name] : item.amount
@@ -84,10 +81,7 @@ function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddSin
                 <button className="btn-sm" disabled={saving[item.name]} onClick={() => handleSave(item)}>
                   {saving[item.name] ? '...' : 'Zapisz'}
                 </button>
-                <button className="btn-sm" onClick={() => onAddSingleToTx(group, item)} title="Dodaj do transakcji">+</button>
-                <input type="checkbox" defaultChecked={isPaid(item.name)}
-                  onChange={e => setPaid(item.name, e.target.checked)}
-                  style={{ width:20, height:20, accentColor:'var(--accent)', cursor:'pointer' }} />
+                <button className="btn-sm" onClick={() => onAddSingleToTx(group, item)} title="Dodaj jako transakcję">+ TX</button>
                 <button className="btn-del" onClick={() => { if (confirm(`Usunąć "${item.name}"?`)) onDelete(item.id, item.name) }}>×</button>
               </div>
             </div>
@@ -104,8 +98,6 @@ function FxGroup({ group, items, monthKey, onSave, onDelete, onAddToTx, onAddSin
 
 export default function FixedExpenses({ user, fixedExpenses, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
   const [modal, setModal] = useState(null) // null | group string
-
-  const monthKey = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` })()
 
   // Group fixed expenses
   const grouped = {}
@@ -159,7 +151,7 @@ export default function FixedExpenses({ user, fixedExpenses, monthLabel, changeM
       </div>
 
       {Object.entries(grouped).map(([group, items]) => (
-        <FxGroup key={group} group={group} items={items} monthKey={monthKey}
+        <FxGroup key={group} group={group} items={items}
           onSave={saveFixed} onDelete={deleteFixed}
           onAddToTx={handleAddToTx} onAddSingleToTx={handleAddSingleToTx} onAddNew={g => setModal(g)} />
       ))}

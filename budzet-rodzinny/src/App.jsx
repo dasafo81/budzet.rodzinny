@@ -12,7 +12,7 @@ import { MONTHS } from './constants'
 const TABS = [
   { id: 'overview', label: 'Przegląd' },
   { id: 'transactions', label: 'Transakcje' },
-  { id: 'fixed', label: 'Stałe wydatki' },
+  { id: 'fixed', label: 'Budżet' },
   { id: 'savings', label: 'Oszczędności' },
   { id: 'ai', label: 'Analiza AI' },
 ]

@@ -3,20 +3,32 @@ import { CATEGORIES, CAT_ICONS, fmt } from '../constants'
 import { MONTHS } from '../constants'
 
 const QUICK_QS = [
-  'Podsumuj wydatki tego miesiąca i wskaż gdzie wydajemy najwięcej',
-  'Gdzie mogę zaoszczędzić? Porównaj z poprzednim miesiącem',
-  'Zaplanuj budżet na przyszły miesiąc na podstawie historii',
-  'Oceń nasze nawyki finansowe i daj 3 konkretne wskazówki',
-  'Ile wydajemy na dzieci i czy to rozsądna kwota?',
+  { q:'Podsumuj wydatki tego miesiąca i wskaż gdzie wydajemy najwięcej', label:'Podsumowanie' },
+  { q:'Gdzie mogę zaoszczędzić? Porównaj z poprzednim miesiącem', label:'Gdzie oszczędzać?' },
+  { q:'Zaplanuj budżet na przyszły miesiąc na podstawie historii', label:'Plan na przyszły miesiąc' },
+  { q:'Oceń realizację budżetu w tym miesiącu i wskaż odchylenia od planu', label:'Ocena budżetu' },
+  { q:'Oceń nasze nawyki finansowe i daj 3 konkretne wskazówki', label:'Analiza nawyków' },
+  { q:'Ile wydajemy na dzieci i czy to rozsądna kwota?', label:'Wydatki na dzieci' },
 ]
 
-export default function AIPanel({ monthTransactions, viewDate, addTransaction, user, showToast }) {
+export default function AIPanel({ monthTransactions, fixedExpenses, viewDate, addTransaction, user, showToast }) {
   const [question, setQuestion] = useState('')
   const [response, setResponse] = useState('Dodaj transakcje i zapytaj AI o analizę budżetu.')
   const [loading, setLoading] = useState(false)
   const [imgBase64, setImgBase64] = useState(null)
   const [imgSrc, setImgSrc] = useState(null)
   const fileRef = useRef()
+
+  const buildBudgetCtx = () => {
+    if (!fixedExpenses?.length) return ''
+    const groups = [...new Set(fixedExpenses.map(f => f.group_name || f.group))]
+    const lines = groups.map(g => {
+      const plan = fixedExpenses.filter(f => (f.group_name || f.group) === g).reduce((s,f)=>s+(parseFloat(f.amount)||0),0)
+      const actual = monthTransactions.filter(t => t.category === g && t.type !== 'income').reduce((s,t)=>s+t.amount,0)
+      return `${g}: plan ${plan.toFixed(0)} zł / wydano ${actual.toFixed(0)} zł`
+    })
+    return `\nBudżet wg kategorii (plan/rzeczywiste): ${lines.join(', ')}`
+  }
 
   const buildCtx = () => {
     const inc  = monthTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+t.amount,0)
@@ -25,7 +37,7 @@ export default function AIPanel({ monthTransactions, viewDate, addTransaction, u
     monthTransactions.filter(t=>t.type==='expense').forEach(t=>{bycat[t.category]=(bycat[t.category]||0)+t.amount})
     return `Miesiąc: ${MONTHS[viewDate.getMonth()]} ${viewDate.getFullYear()}
 Przychody: ${inc.toFixed(2)} zł | Wydatki: ${exp.toFixed(2)} zł | Bilans: ${(inc-exp).toFixed(2)} zł
-Kategorie: ${Object.entries(bycat).map(([k,v])=>k+': '+v.toFixed(0)+' zł').join(', ')||'brak'}
+Kategorie: ${Object.entries(bycat).map(([k,v])=>k+': '+v.toFixed(0)+' zł').join(', ')||'brak'}${buildBudgetCtx()}
 Ostatnie: ${monthTransactions.slice(0,8).map(t=>t.name+' '+t.amount+' zł').join(', ')||'brak'}`
   }
 
@@ -107,9 +119,9 @@ Ostatnie: ${monthTransactions.slice(0,8).map(t=>t.name+' '+t.amount+' zł').join
           <button className="btn-ghost" onClick={()=>askAI()} disabled={loading}>Zapytaj ↗</button>
         </div>
         <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
-          {QUICK_QS.map((q,i) => (
-            <button key={i} className="qq" onClick={()=>askAI(q)}>
-              {['Podsumowanie','Gdzie oszczędzać?','Plan na przyszły miesiąc','Analiza nawyków','Wydatki na dzieci'][i]}
+          {QUICK_QS.map((item,i) => (
+            <button key={i} className="qq" onClick={()=>askAI(item.q)}>
+              {item.label}
             </button>
           ))}
         </div>

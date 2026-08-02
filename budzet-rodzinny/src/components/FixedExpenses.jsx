@@ -1,17 +1,21 @@
 import { useState } from 'react'
 import MonthNav from './MonthNav'
-import { CATEGORIES, CAT_ICONS, FX_GROUPS, SAVINGS_CATS, SAVINGS_NAMES, fmt } from '../constants'
+import { CATEGORIES, CAT_ICONS, FX_GROUPS, SAVINGS_CATS, SAVINGS_NAMES, INCOME_CATS, fmt } from '../constants'
 
-// Build the full list of budget rows: every canonical subcategory from constants.js
-// (so it always lines up 1:1 with what's selectable in "Dodaj transakcję"), plus any
-// extra custom items already saved in fixed_expenses that don't match a canonical name
-// (e.g. legacy entries like "Netflix").
+const ALL_GROUPS = ['PRZYCHÓD', ...FX_GROUPS]
+
+function canonicalFor(group) {
+  if (group === 'OSZCZĘDZANIE') return SAVINGS_CATS.map(key => ({ name: key, label: SAVINGS_NAMES[key] || key }))
+  if (group === 'PRZYCHÓD') return INCOME_CATS.map(n => ({ name: n, label: n }))
+  return (CATEGORIES[group] || []).map(n => ({ name: n, label: n }))
+}
+
+// Every canonical subcategory always shows up (so it lines up 1:1 with "Dodaj transakcję"),
+// plus any extra custom items already saved that don't match a canonical name.
 function buildRows(fixedExpenses, monthTransactions) {
   const rows = []
-  FX_GROUPS.forEach(group => {
-    const canonical = group === 'OSZCZĘDZANIE'
-      ? SAVINGS_CATS.map(key => ({ name: key, label: SAVINGS_NAMES[key] || key }))
-      : (CATEGORIES[group] || []).map(n => ({ name: n, label: n }))
+  ALL_GROUPS.forEach(group => {
+    const canonical = canonicalFor(group)
     const canonicalNames = new Set(canonical.map(c => c.name))
     const existingForGroup = fixedExpenses.filter(f => (f.group_name || f.group) === group)
     const extra = existingForGroup
@@ -22,7 +26,7 @@ function buildRows(fixedExpenses, monthTransactions) {
       const existing = existingForGroup.find(f => f.name === name)
       const plan = existing ? (parseFloat(existing.amount) || 0) : 0
       const actual = monthTransactions
-        .filter(t => t.category === group && t.subcategory === name && t.type !== 'income')
+        .filter(t => t.category === group && t.subcategory === name && (group === 'PRZYCHÓD' ? t.type === 'income' : t.type !== 'income'))
         .reduce((s, t) => s + t.amount, 0)
       rows.push({ group, name, label, id: existing?.id, plan, actual })
     })
@@ -30,8 +34,15 @@ function buildRows(fixedExpenses, monthTransactions) {
   return rows
 }
 
-function buildInsights(expenseRows, totalPlanExp, totalActualExp, totalPlanSav, totalActualSav) {
+function buildInsights(expenseRows, totalPlanExp, totalActualExp, totalPlanSav, totalActualSav, pozostajeDoRozdysponowania) {
   const insights = []
+  if (Math.abs(pozostajeDoRozdysponowania) > 1) {
+    insights.push(
+      pozostajeDoRozdysponowania > 0
+        ? `Plan nie jest jeszcze domknięty — ${fmt(pozostajeDoRozdysponowania)} planowanych przychodów nie ma jeszcze przypisanej kategorii.`
+        : `Plan wydatków i oszczędności przekracza planowane przychody o ${fmt(-pozostajeDoRozdysponowania)}.`
+    )
+  }
   if (totalPlanExp > 0) {
     const pct = Math.round((totalActualExp / totalPlanExp) * 100)
     insights.push(
@@ -82,7 +93,7 @@ function FxModal({ onSave, onClose, preGroup }) {
         <div className="ff" style={{ marginBottom:10 }}>
           <label>Grupa</label>
           <select value={group} onChange={e => setGroup(e.target.value)}>
-            {FX_GROUPS.map(g => <option key={g} value={g}>{CAT_ICONS[g] || '📌'} {g}</option>)}
+            {ALL_GROUPS.map(g => <option key={g} value={g}>{CAT_ICONS[g] || '📌'} {g}</option>)}
           </select>
         </div>
         <div className="ff" style={{ marginBottom:10 }}>
@@ -105,97 +116,106 @@ function FxModal({ onSave, onClose, preGroup }) {
   )
 }
 
-function BudgetRow({ row, isSavings, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddSingleToTx }) {
-  const key = row.group + '|' + row.name
-  const localVal = localAmounts[key]
-  const plan = localVal !== undefined ? (parseFloat(localVal) || 0) : row.plan
-  const pct = plan > 0 ? Math.round((row.actual / plan) * 100) : (row.actual > 0 ? 100 : 0)
-  const diff = isSavings ? (row.actual - plan) : (plan - row.actual)
-  const good = diff >= 0
-
-  let barColor
-  if (isSavings) barColor = row.actual >= plan ? 'var(--accent)' : (pct >= 60 ? 'var(--warn)' : 'var(--danger)')
-  else barColor = pct > 100 ? 'var(--danger)' : pct > 80 ? 'var(--warn)' : 'var(--accent)'
-
+// In-cell "data bar" — mimics Numbers' conditional-format green bars behind the % number.
+function PctCell({ plan, pct, colorVar }) {
+  if (!(plan > 0)) return <div className="bdg-cell right"><span className="pct-empty">—</span></div>
+  const barWidth = Math.min(Math.max(pct, 0), 100)
   return (
-    <div className="bdg-item">
-      <div className="bdg-item-top">
-        <div style={{ fontSize:14, fontWeight:500 }}>{row.label}</div>
-        <div className="fx-item-r">
-          <button className="btn-sm" disabled={savingKeys[key]} onClick={() => onSaveRow(row, localVal)}>
-            {savingKeys[key] ? '...' : 'Zapisz'}
-          </button>
-          <button className="btn-sm" onClick={() => onAddSingleToTx(row, plan)} title="Dodaj do transakcji">+</button>
-          {row.id && (
-            <button className="btn-del" onClick={() => { if (confirm(`Usunąć plan dla "${row.label}"?`)) onDelete(row.id, row.label) }}>×</button>
-          )}
-        </div>
+    <div className="bdg-cell right">
+      <div className="pct-bar" style={{ background:`linear-gradient(to right, ${colorVar}26 ${barWidth}%, transparent ${barWidth}%)` }}>
+        <span style={{ color: colorVar }}>{Math.round(pct)}%</span>
       </div>
-      <div className="bdg-row">
-        <div className="bdg-field">
-          <span className="bdg-lbl">Plan</span>
-          <input type="number" className="fx-inp" defaultValue={row.plan || 0}
-            onChange={e => setLocalAmounts(a => ({ ...a, [key]: e.target.value }))} />
-        </div>
-        <div className="bdg-field">
-          <span className="bdg-lbl">Rzeczywiste</span>
-          <div className="bdg-val">{fmt(row.actual)}</div>
-        </div>
-        <div className="bdg-field">
-          <span className="bdg-lbl">Różnica</span>
-          <div className="bdg-val" style={{ color: good ? 'var(--accent)' : 'var(--danger)' }}>
-            {diff >= 0 ? '+' : ''}{fmt(diff)}
-          </div>
-        </div>
-      </div>
-      <div className="bar-track"><div className="bar-fill" style={{ width: Math.min(pct, 100) + '%', background: barColor }} /></div>
     </div>
   )
 }
 
-function BudgetGroup({ group, rows, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddGroupToTx, onAddSingleToTx, onAddNew }) {
-  const [open, setOpen] = useState(true)
-  const isSavings = group === 'OSZCZĘDZANIE'
-  const totalPlan = rows.reduce((s, r) => s + r.plan, 0)
-  const totalActual = rows.reduce((s, r) => s + r.actual, 0)
-  const diff = isSavings ? (totalActual - totalPlan) : (totalPlan - totalActual)
+function colorFor(pct, reverseGood) {
+  if (reverseGood) return pct >= 100 ? 'var(--accent)' : pct >= 60 ? 'var(--warn)' : 'var(--danger)'
+  return pct > 100 ? 'var(--danger)' : pct > 80 ? 'var(--warn)' : 'var(--accent)'
+}
+
+function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddSingleToTx }) {
+  const key = row.group + '|' + row.name
+  const localVal = localAmounts[key]
+  const plan = localVal !== undefined ? (parseFloat(localVal) || 0) : row.plan
+  const pct = plan > 0 ? (row.actual / plan) * 100 : 0
+  const diff = reverseGood ? (row.actual - plan) : (plan - row.actual)
   const good = diff >= 0
+  const color = plan > 0 ? colorFor(pct, reverseGood) : (good ? 'var(--accent)' : 'var(--danger)')
 
   return (
-    <div className="fx-group">
-      <div className="fx-hdr" onClick={() => setOpen(o => !o)} style={{ flexWrap:'wrap', gap:6 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:18 }}>{CAT_ICONS[group] || '📌'}</span>
-          <span style={{ fontSize:15, fontWeight:600 }}>{group}</span>
-        </div>
-        <div style={{ display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
-          <span style={{ fontSize:12, color:'var(--text3)' }}>Plan {fmt(totalPlan)}</span>
-          <span style={{ fontSize:12, color:'var(--text3)' }}>Fakt {fmt(totalActual)}</span>
-          <span style={{ fontSize:14, fontWeight:600, fontFamily:"'DM Mono',monospace", color: good ? 'var(--accent)' : 'var(--danger)' }}>
-            {diff >= 0 ? '+' : '-'}{fmt(Math.abs(diff))}
-          </span>
-        </div>
+    <div className="bdg-row-wrap">
+      <div className="bdg-cell bdg-itemname">{row.label}</div>
+      <div className="bdg-cell right">
+        <input type="number" className="fx-inp bdg-inp" defaultValue={row.plan || 0}
+          onChange={e => setLocalAmounts(a => ({ ...a, [key]: e.target.value }))} />
       </div>
+      <div className="bdg-cell right mono">{fmt(row.actual)}</div>
+      <div className="bdg-cell right mono" style={{ color: good ? 'var(--accent)' : 'var(--danger)' }}>
+        {diff >= 0 ? '+' : ''}{fmt(diff)}
+      </div>
+      <PctCell plan={plan} pct={pct} colorVar={color} />
+      <div className="bdg-cell bdg-actions">
+        <button className="bdg-icon-btn" disabled={savingKeys[key]} title="Zapisz plan" onClick={() => onSaveRow(row, localVal)}>{savingKeys[key] ? '…' : '💾'}</button>
+        <button className="bdg-icon-btn" title="Dodaj jako transakcję" onClick={() => onAddSingleToTx(row, plan)}>➕</button>
+        {row.id && <button className="bdg-icon-btn danger" title="Usuń plan" onClick={() => { if (confirm(`Usunąć plan dla "${row.label}"?`)) onDelete(row.id, row.label) }}>×</button>}
+      </div>
+    </div>
+  )
+}
+
+function BudgetGroupBlock({ group, rows, reverseGood, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddGroupToTx, onAddSingleToTx, onAddNew }) {
+  const [open, setOpen] = useState(true)
+  const totalPlan = rows.reduce((s, r) => s + r.plan, 0)
+  const totalActual = rows.reduce((s, r) => s + r.actual, 0)
+  const pct = totalPlan > 0 ? (totalActual / totalPlan) * 100 : 0
+  const diff = reverseGood ? (totalActual - totalPlan) : (totalPlan - totalActual)
+  const good = diff >= 0
+  const color = totalPlan > 0 ? colorFor(pct, reverseGood) : (good ? 'var(--accent)' : 'var(--danger)')
+
+  return (
+    <>
+      <div className="bdg-row-wrap bdg-grouprow" onClick={() => setOpen(o => !o)}>
+        <div className="bdg-cell bdg-groupname"><span>{CAT_ICONS[group] || '📌'}</span> {group}</div>
+        <div className="bdg-cell right mono">{fmt(totalPlan)}</div>
+        <div className="bdg-cell right mono">{fmt(totalActual)}</div>
+        <div className="bdg-cell right mono" style={{ color: good ? 'var(--accent)' : 'var(--danger)' }}>
+          {diff >= 0 ? '+' : ''}{fmt(diff)}
+        </div>
+        <PctCell plan={totalPlan} pct={pct} colorVar={color} />
+        <div className="bdg-cell bdg-toggle">{open ? '▾' : '▸'}</div>
+      </div>
+      {open && rows.map(row => (
+        <BudgetItemRow key={row.name} row={row} reverseGood={reverseGood}
+          localAmounts={localAmounts} setLocalAmounts={setLocalAmounts} savingKeys={savingKeys}
+          onSaveRow={onSaveRow} onDelete={onDelete} onAddSingleToTx={onAddSingleToTx} />
+      ))}
       {open && (
-        <div className="fx-body">
-          {rows.length === 0
-            ? <div className="empty">Brak pozycji</div>
-            : rows.map(row => (
-                <BudgetRow key={row.name} row={row} isSavings={isSavings}
-                  localAmounts={localAmounts} setLocalAmounts={setLocalAmounts} savingKeys={savingKeys}
-                  onSaveRow={onSaveRow} onDelete={onDelete} onAddSingleToTx={onAddSingleToTx} />
-              ))}
-          <div style={{ marginTop:8, display:'flex', gap:8, flexWrap:'wrap' }}>
+        <div className="bdg-row-wrap bdg-groupactions">
+          <div className="bdg-cell" style={{ gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'6px 10px 10px' }}>
             <button className="btn-sm" onClick={() => onAddGroupToTx(group, rows)}>+ Dodaj wszystkie do transakcji</button>
             <button className="btn-sm" onClick={() => onAddNew(group)}>+ Nowa pozycja</button>
           </div>
         </div>
       )}
+    </>
+  )
+}
+
+function TableHeader({ planLabel }) {
+  return (
+    <div className="bdg-row-wrap bdg-headrow">
+      <div className="bdg-th">Kategoria</div>
+      <div className="bdg-th right">{planLabel}</div>
+      <div className="bdg-th right">Rzeczywiste</div>
+      <div className="bdg-th right">Różnica</div>
+      <div className="bdg-th right">%</div>
+      <div className="bdg-th"></div>
     </div>
   )
 }
 
-export default function FixedExpenses({ user, fixedExpenses, monthTransactions, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
+export default function FixedExpenses({ user, fixedExpenses, monthTransactions, viewDate, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
   const [modal, setModal] = useState(null) // null | group string
   const [localAmounts, setLocalAmounts] = useState({})
   const [savingKeys, setSavingKeys] = useState({})
@@ -204,14 +224,29 @@ export default function FixedExpenses({ user, fixedExpenses, monthTransactions, 
   const byGroup = {}
   rows.forEach(r => { (byGroup[r.group] ||= []).push(r) })
 
-  const expenseRows = rows.filter(r => r.group !== 'OSZCZĘDZANIE')
+  const incomeRows = byGroup['PRZYCHÓD'] || []
+  const expenseRows = rows.filter(r => r.group !== 'OSZCZĘDZANIE' && r.group !== 'PRZYCHÓD')
   const savingsRows = rows.filter(r => r.group === 'OSZCZĘDZANIE')
+
+  const totalPlanIncome = incomeRows.reduce((s, r) => s + r.plan, 0)
+  const totalActualIncome = incomeRows.reduce((s, r) => s + r.actual, 0)
   const totalPlanExp = expenseRows.reduce((s, r) => s + r.plan, 0)
   const totalActualExp = expenseRows.reduce((s, r) => s + r.actual, 0)
   const totalPlanSav = savingsRows.reduce((s, r) => s + r.plan, 0)
   const totalActualSav = savingsRows.reduce((s, r) => s + r.actual, 0)
-  const balance = totalPlanExp - totalActualExp
-  const insights = buildInsights(expenseRows, totalPlanExp, totalActualExp, totalPlanSav, totalActualSav)
+
+  const totalPlanAlloc = totalPlanExp + totalPlanSav
+  const totalActualAlloc = totalActualExp + totalActualSav
+  const pozostajeDoRozdysponowania = totalPlanIncome - totalPlanAlloc
+  const mogeJeszczeWydac = totalPlanAlloc - totalActualAlloc
+
+  const now = new Date()
+  const isCurrentMonth = viewDate.getFullYear() === now.getFullYear() && viewDate.getMonth() === now.getMonth()
+  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate()
+  const daysRemaining = isCurrentMonth ? Math.max(daysInMonth - now.getDate() + 1, 1) : null
+  const dailyAllowance = daysRemaining ? mogeJeszczeWydac / daysRemaining : null
+
+  const insights = buildInsights(expenseRows, totalPlanExp, totalActualExp, totalPlanSav, totalActualSav, pozostajeDoRozdysponowania)
 
   const handleSaveRow = async (row, val) => {
     const key = row.group + '|' + row.name
@@ -226,7 +261,7 @@ export default function FixedExpenses({ user, fixedExpenses, monthTransactions, 
     const ok = await addTransaction({
       name: row.label, amount: plan,
       date: new Date().toISOString().split('T')[0],
-      type: row.group === 'OSZCZĘDZANIE' ? 'savings' : 'expense',
+      type: row.group === 'OSZCZĘDZANIE' ? 'savings' : row.group === 'PRZYCHÓD' ? 'income' : 'expense',
       category: row.group, subcategory: row.name,
       payment_source: 'Porters',
     })
@@ -241,7 +276,7 @@ export default function FixedExpenses({ user, fixedExpenses, monthTransactions, 
       const r = await addTransaction({
         name: row.label, amount: row.plan,
         date: new Date().toISOString().split('T')[0],
-        type: group === 'OSZCZĘDZANIE' ? 'savings' : 'expense',
+        type: group === 'OSZCZĘDZANIE' ? 'savings' : group === 'PRZYCHÓD' ? 'income' : 'expense',
         category: group, subcategory: row.name,
         payment_source: 'Porters',
       })
@@ -250,25 +285,50 @@ export default function FixedExpenses({ user, fixedExpenses, monthTransactions, 
     if (ok) showToast(`Dodano ${withPlan.length} pozycji`)
   }
 
+  const rowProps = { localAmounts, setLocalAmounts, savingKeys, onSaveRow: handleSaveRow, onDelete: deleteFixed, onAddSingleToTx: handleAddSingleToTx }
+  const handleAddNewIncome = () => setModal('PRZYCHÓD')
+
   return (
     <div>
       <MonthNav label={monthLabel} onChange={changeMonth} />
 
+      <div className="card-title" style={{ marginBottom:8 }}>Plan budżetu</div>
       <div className="g3" style={{ marginBottom:'1rem' }}>
         <div className="card">
-          <div className="stat-lbl">Plan wydatków</div>
-          <div className="stat-val">{fmt(totalPlanExp)}</div>
-          <div className="stat-sub">Rzeczywiste: {fmt(totalActualExp)}</div>
+          <div className="stat-lbl">Planowane przychody</div>
+          <div className="stat-val">{fmt(totalPlanIncome)}</div>
+          <div className="stat-sub">Rzeczywiste: {fmt(totalActualIncome)}</div>
         </div>
         <div className="card">
-          <div className="stat-lbl">Bilans planu</div>
-          <div className={`stat-val ${balance >= 0 ? 'green' : 'red'}`}>{balance >= 0 ? '+' : ''}{fmt(balance)}</div>
-          <div className="stat-sub">{balance >= 0 ? 'Zostało w budżecie' : 'Przekroczono budżet'}</div>
+          <div className="stat-lbl">Planowane wydatki (z oszczędnościami)</div>
+          <div className="stat-val">{fmt(totalPlanAlloc)}</div>
+          <div className="stat-sub">Rzeczywiste: {fmt(totalActualAlloc)}</div>
         </div>
         <div className="card">
-          <div className="stat-lbl">Oszczędności — fakt / plan</div>
-          <div className="stat-val" style={{ color:'var(--accent)' }}>{fmt(totalActualSav)}</div>
-          <div className="stat-sub">Cel na miesiąc: {fmt(totalPlanSav)}</div>
+          <div className="stat-lbl">Pozostaje do rozdysponowania</div>
+          <div className={`stat-val ${Math.abs(pozostajeDoRozdysponowania) <= 1 ? 'green' : pozostajeDoRozdysponowania > 0 ? '' : 'red'}`}>
+            {fmt(pozostajeDoRozdysponowania)}
+          </div>
+          <div className="stat-sub">Po dopięciu planu powinno być 0 zł</div>
+        </div>
+      </div>
+
+      <div className="card-title" style={{ marginBottom:8 }}>Realizacja tego miesiąca</div>
+      <div className="g3" style={{ marginBottom:'1rem' }}>
+        <div className="card">
+          <div className="stat-lbl">Rzeczywiste przychody</div>
+          <div className="stat-val green">{fmt(totalActualIncome)}</div>
+        </div>
+        <div className="card">
+          <div className="stat-lbl">Rzeczywiste wydatki (z oszczędnościami)</div>
+          <div className="stat-val red">{fmt(totalActualAlloc)}</div>
+        </div>
+        <div className="card">
+          <div className="stat-lbl">Mogę jeszcze wydać do końca miesiąca</div>
+          <div className={`stat-val ${mogeJeszczeWydac >= 0 ? 'green' : 'red'}`}>{fmt(mogeJeszczeWydac)}</div>
+          {dailyAllowance !== null && (
+            <div className="stat-sub">Dziennie: {fmt(dailyAllowance)} (zostało {daysRemaining} dni)</div>
+          )}
         </div>
       </div>
 
@@ -281,18 +341,34 @@ export default function FixedExpenses({ user, fixedExpenses, monthTransactions, 
         </div>
       )}
 
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem', flexWrap:'wrap', gap:8 }}>
-        <div style={{ fontSize:14, color:'var(--text2)' }}>Zaplanuj budżet dla każdej podkategorii i porównuj z rzeczywistymi wydatkami.</div>
-        <button className="btn-sm" style={{ padding:'6px 14px', fontSize:13 }} onClick={() => setModal('')}>+ Dodaj pozycję</button>
+      <div className="card-title" style={{ marginBottom:8 }}>Przychody</div>
+      <div className="bdg-scroll" style={{ marginBottom:'1.5rem' }}>
+        <div className="bdg-table">
+          <TableHeader planLabel="Plan przychodów" />
+          {incomeRows.map(row => (
+            <BudgetItemRow key={row.name} row={row} reverseGood={true} {...rowProps} />
+          ))}
+          <div className="bdg-row-wrap bdg-groupactions">
+            <div className="bdg-cell" style={{ gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'6px 10px 10px' }}>
+              <button className="btn-sm" onClick={handleAddNewIncome}>+ Nowe źródło przychodu</button>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {FX_GROUPS.map(group => (
-        <BudgetGroup key={group} group={group} rows={byGroup[group] || []}
-          localAmounts={localAmounts} setLocalAmounts={setLocalAmounts} savingKeys={savingKeys}
-          onSaveRow={handleSaveRow} onDelete={deleteFixed}
-          onAddGroupToTx={handleAddGroupToTx} onAddSingleToTx={handleAddSingleToTx}
-          onAddNew={g => setModal(g)} />
-      ))}
+      <div className="card-title" style={{ marginBottom:8 }}>Wydatki i oszczędności</div>
+      <div className="bdg-scroll">
+        <div className="bdg-table">
+          <TableHeader planLabel="Plan wydatków" />
+          {FX_GROUPS.map(group => (
+            <BudgetGroupBlock key={group} group={group} rows={byGroup[group] || []}
+              reverseGood={group === 'OSZCZĘDZANIE'}
+              {...rowProps}
+              onAddGroupToTx={handleAddGroupToTx}
+              onAddNew={g => setModal(g)} />
+          ))}
+        </div>
+      </div>
 
       {modal !== null && (
         <FxModal preGroup={modal || 'DOM'} onSave={saveFixed} onClose={() => setModal(null)} />

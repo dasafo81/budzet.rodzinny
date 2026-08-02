@@ -15,7 +15,7 @@ export const CAT_ICONS = {
 
 export const CATEGORIES = {
   DOM:          ['Prąd','Gaz','Woda','Wywóz śmieci','Internet','Ubezpieczenie','Podatek','Czynsz','Remonty','Ogród'],
-  DZIECI:       ['Talent','Wycieczki','Korepetycje','Pozostałe'],
+  DZIECI:       ['Montessori','Angielski Benio','Same Judo','Talent','Wycieczki','Korepetycje','Pozostałe'],
   JEDZENIE:     ['Sklep spożywczy','Restauracja'],
   TRANSPORT:    ['Paliwo','Komunikacja miejska','Taksówka/Uber','Serwis auta'],
   ZDROWIE:      ['Apteka','Lekarz'],

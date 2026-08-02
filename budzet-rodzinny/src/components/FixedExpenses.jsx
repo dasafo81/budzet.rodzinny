@@ -11,24 +11,45 @@ function canonicalFor(group) {
 }
 
 // Every canonical subcategory always shows up (so it lines up 1:1 with "Dodaj transakcję"),
-// plus any extra custom items already saved that don't match a canonical name.
+// plus any extra item already saved in fixed_expenses, plus any category/subcategory that
+// only exists in older transactions — otherwise trimming the category list would silently
+// hide past spending.
 function buildRows(fixedExpenses, monthTransactions) {
   const rows = []
-  ALL_GROUPS.forEach(group => {
+
+  const groupOf = f => f.group_name || f.group
+  const legacyGroups = [...new Set([
+    ...fixedExpenses.map(groupOf),
+    ...monthTransactions.map(t => t.category),
+  ])].filter(g => g && !ALL_GROUPS.includes(g))
+  const groups = [...ALL_GROUPS, ...legacyGroups]
+
+  groups.forEach(group => {
     const canonical = canonicalFor(group)
     const canonicalNames = new Set(canonical.map(c => c.name))
-    const existingForGroup = fixedExpenses.filter(f => (f.group_name || f.group) === group)
-    const extra = existingForGroup
-      .filter(f => !canonicalNames.has(f.name))
-      .map(f => ({ name: f.name, label: f.name }))
+    const existingForGroup = fixedExpenses.filter(f => groupOf(f) === group)
 
-    ;[...canonical, ...extra].forEach(({ name, label }) => {
+    const seen = new Set(canonicalNames)
+    const extra = []
+    existingForGroup.forEach(f => {
+      if (f.name && !seen.has(f.name)) { seen.add(f.name); extra.push({ name: f.name, label: f.name }) }
+    })
+    monthTransactions.forEach(t => {
+      const isIncome = t.type === 'income'
+      if (t.category !== group) return
+      if (group === 'PRZYCHÓD' ? !isIncome : isIncome) return
+      const sub = t.subcategory || '—'
+      if (!seen.has(sub)) { seen.add(sub); extra.push({ name: sub, label: sub, legacy: true }) }
+    })
+
+    ;[...canonical, ...extra].forEach(({ name, label, legacy }) => {
       const existing = existingForGroup.find(f => f.name === name)
       const plan = existing ? (parseFloat(existing.amount) || 0) : 0
       const actual = monthTransactions
-        .filter(t => t.category === group && t.subcategory === name && (group === 'PRZYCHÓD' ? t.type === 'income' : t.type !== 'income'))
+        .filter(t => t.category === group && (t.subcategory || '—') === name && (group === 'PRZYCHÓD' ? t.type === 'income' : t.type !== 'income'))
         .reduce((s, t) => s + t.amount, 0)
-      rows.push({ group, name, label, id: existing?.id, plan, actual })
+      if (legacy && plan === 0 && actual === 0) return
+      rows.push({ group, name, label, id: existing?.id, plan, actual, legacy: !!legacy })
     })
   })
   return rows
@@ -145,7 +166,10 @@ function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, saving
 
   return (
     <div className="bdg-row-wrap">
-      <div className="bdg-cell bdg-itemname">{row.label}</div>
+      <div className="bdg-cell bdg-itemname">
+        {row.label}
+        {row.legacy && <span className="tag-legacy" title="Pozycja spoza aktualnej listy kategorii — pochodzi ze starszych transakcji">archiwalne</span>}
+      </div>
       <div className="bdg-cell right">
         <input type="number" className="fx-inp bdg-inp" defaultValue={row.plan || 0}
           onChange={e => setLocalAmounts(a => ({ ...a, [key]: e.target.value }))} />
@@ -227,6 +251,12 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
   const incomeRows = byGroup['PRZYCHÓD'] || []
   const expenseRows = rows.filter(r => r.group !== 'OSZCZĘDZANIE' && r.group !== 'PRZYCHÓD')
   const savingsRows = rows.filter(r => r.group === 'OSZCZĘDZANIE')
+
+  // Canonical groups first, then any legacy group still carrying data
+  const expenseGroupNames = [
+    ...FX_GROUPS,
+    ...Object.keys(byGroup).filter(g => g !== 'PRZYCHÓD' && !FX_GROUPS.includes(g)),
+  ]
 
   const totalPlanIncome = incomeRows.reduce((s, r) => s + r.plan, 0)
   const totalActualIncome = incomeRows.reduce((s, r) => s + r.actual, 0)
@@ -360,7 +390,7 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
       <div className="bdg-scroll">
         <div className="bdg-table">
           <TableHeader planLabel="Plan wydatków" />
-          {FX_GROUPS.map(group => (
+          {expenseGroupNames.map(group => (
             <BudgetGroupBlock key={group} group={group} rows={byGroup[group] || []}
               reverseGood={group === 'OSZCZĘDZANIE'}
               {...rowProps}

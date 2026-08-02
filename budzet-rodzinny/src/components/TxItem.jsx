@@ -1,8 +1,18 @@
 import { useState } from 'react'
-import { CAT_COLORS, CAT_ICONS, SOURCE_ICONS, fmt, fmtDate } from '../constants'
+import {
+  CATEGORIES, CAT_COLORS, CAT_ICONS, SOURCES, SOURCE_ICONS,
+  INCOME_CATS, SAVINGS_CATS, SAVINGS_NAMES, fmt, fmtDate,
+} from '../constants'
 
-export default function TxItem({ tx, userId, onEdit, onDelete }) {
+function subOptionsFor(tx, category) {
+  if (tx.type === 'income') return INCOME_CATS
+  if (tx.type === 'savings') return SAVINGS_CATS
+  return CATEGORIES[category] || []
+}
+
+export default function TxItem({ tx, onEdit, onDelete }) {
   const [showModal, setShowModal] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({
     name: tx.name,
     amount: tx.amount,
@@ -17,19 +27,36 @@ export default function TxItem({ tx, userId, onEdit, onDelete }) {
   const sign = tx.type === 'income' ? '+' : tx.type === 'savings' ? '🏦 ' : '-'
   const cls = tx.type === 'income' ? 'pos' : 'neg'
 
-  const handleSave = async () => {
-    const success = await onEdit(tx.id, form)
-    if (success) setShowModal(false)
+  const subLabel = tx.type === 'savings'
+    ? (SAVINGS_NAMES[tx.subcategory] || tx.subcategory || tx.category)
+    : (tx.subcategory || tx.category)
+
+  const open = () => {
+    setForm({
+      name: tx.name, amount: tx.amount, category: tx.category,
+      subcategory: tx.subcategory || '', payment_source: tx.payment_source || '', date: tx.date,
+    })
+    setShowModal(true)
   }
+
+  const handleSave = async () => {
+    if (!onEdit) { setShowModal(false); return }
+    setSaving(true)
+    const ok = await onEdit(tx.id, { ...form, amount: parseFloat(form.amount) || 0 })
+    setSaving(false)
+    if (ok) setShowModal(false)
+  }
+
+  const subOptions = subOptionsFor(tx, form.category)
 
   return (
     <>
       <div className="txi">
         <div className="txi-l">
           <div className="txi-ico" style={{ background: color + '22' }}>{icon}</div>
-          <div>
+          <div style={{ minWidth:0 }}>
             <div className="txi-name">{tx.name}</div>
-            <div className="txi-meta">{tx.subcategory || tx.category} · {fmtDate(tx.date)} · {tx.user_name}</div>
+            <div className="txi-meta">{subLabel} · {fmtDate(tx.date)} · {tx.user_name}</div>
           </div>
         </div>
         <div className="txi-r">
@@ -37,13 +64,13 @@ export default function TxItem({ tx, userId, onEdit, onDelete }) {
             <span className="src-badge">{SOURCE_ICONS[tx.payment_source] || ''} {tx.payment_source}</span>
           )}
           <div className={`txi-amt ${cls}`}>{sign}{fmt(tx.amount)}</div>
-          <button className="btn-edit" onClick={() => setShowModal(true)} title="Edytuj">✎</button>
-          <button className="btn-del" onClick={() => { if (confirm('Usunąć?')) onDelete(tx.id) }} title="Usuń">×</button>
+          {onEdit && <button className="btn-edit" onClick={open} title="Edytuj">✎</button>}
+          {onDelete && <button className="btn-del" onClick={() => { if (confirm(`Usunąć „${tx.name}”?`)) onDelete(tx.id) }} title="Usuń">×</button>}
         </div>
       </div>
 
       {showModal && (
-        <div className="modal-overlay" onClick={() => setShowModal(false)}>
+        <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3>Edytuj transakcję</h3>
@@ -51,25 +78,45 @@ export default function TxItem({ tx, userId, onEdit, onDelete }) {
             </div>
             <div className="modal-body">
               <label>
-                Nazwa
+                Opis
                 <input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
               </label>
               <label>
-                Kwota
-                <input type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: parseFloat(e.target.value) || 0 })} />
+                Kwota (zł)
+                <input type="number" step="0.01" min="0" value={form.amount}
+                  onChange={e => setForm({ ...form, amount: e.target.value })} />
               </label>
-              <label>
-                Kategoria
-                <input value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
-              </label>
+
+              {tx.type === 'expense' && (
+                <label>
+                  Kategoria
+                  <select value={form.category}
+                    onChange={e => setForm({ ...form, category: e.target.value, subcategory: '' })}>
+                    {Object.keys(CATEGORIES).map(g => (
+                      <option key={g} value={g}>{CAT_ICONS[g] || '📌'} {g}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
               <label>
                 Podkategoria
-                <input value={form.subcategory} onChange={e => setForm({ ...form, subcategory: e.target.value })} placeholder="Opcjonalnie" />
+                <select value={form.subcategory} onChange={e => setForm({ ...form, subcategory: e.target.value })}>
+                  <option value="">— wybierz —</option>
+                  {subOptions.map(s => (
+                    <option key={s} value={s}>{tx.type === 'savings' ? (SAVINGS_NAMES[s] || s) : s}</option>
+                  ))}
+                </select>
               </label>
+
               <label>
-                Źródło płatności
-                <input value={form.payment_source} onChange={e => setForm({ ...form, payment_source: e.target.value })} placeholder="Opcjonalnie" />
+                Źródło finansowania
+                <select value={form.payment_source} onChange={e => setForm({ ...form, payment_source: e.target.value })}>
+                  <option value="">— brak —</option>
+                  {SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICONS[s]} {s}</option>)}
+                </select>
               </label>
+
               <label>
                 Data
                 <input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -77,7 +124,9 @@ export default function TxItem({ tx, userId, onEdit, onDelete }) {
             </div>
             <div className="modal-footer">
               <button className="btn-outline" onClick={() => setShowModal(false)}>Anuluj</button>
-              <button className="btn-primary" onClick={handleSave}>Zapisz</button>
+              <button className="btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? 'Zapisuję…' : 'Zapisz zmiany'}
+              </button>
             </div>
           </div>
         </div>

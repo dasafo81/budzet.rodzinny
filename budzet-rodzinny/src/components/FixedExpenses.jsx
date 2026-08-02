@@ -215,7 +215,7 @@ function TableHeader({ planLabel }) {
   )
 }
 
-export default function FixedExpenses({ user, fixedExpenses, monthTransactions, viewDate, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
+export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDate, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
   const [modal, setModal] = useState(null) // null | group string
   const [localAmounts, setLocalAmounts] = useState({})
   const [savingKeys, setSavingKeys] = useState({})

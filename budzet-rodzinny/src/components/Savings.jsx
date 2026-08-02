@@ -2,7 +2,7 @@ import MonthNav from './MonthNav'
 import TxItem from './TxItem'
 import { SAVINGS_NAMES, SAVINGS_ICONS, SAVINGS_TARGETS, fmt } from '../constants'
 
-export default function Savings({ user, transactions, monthTransactions, monthLabel, changeMonth }) {
+export default function Savings({ transactions, monthTransactions, monthLabel, changeMonth }) {
   const totals = { wakacje:0, inwestycje:0, poduszka:0 }
   transactions.filter(t => t.type === 'savings').forEach(t => {
     if (totals[t.subcategory] !== undefined) totals[t.subcategory] += t.amount
@@ -31,7 +31,7 @@ export default function Savings({ user, transactions, monthTransactions, monthLa
         <div className="tx-list" style={{ maxHeight:400 }}>
           {savTxs.length === 0
             ? <div className="empty">Brak oszczędności w tym miesiącu</div>
-            : savTxs.map(tx => <TxItem key={tx.id} tx={tx} userId={user.id} />)}
+            : savTxs.map(tx => <TxItem key={tx.id} tx={tx} />)}
         </div>
       </div>
     </div>

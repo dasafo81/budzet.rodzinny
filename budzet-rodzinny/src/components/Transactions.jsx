@@ -1,98 +1,123 @@
 import { useState } from 'react'
 import MonthNav from './MonthNav'
-import AddTransactionForm from './AddTransactionForm'
+import { AddTransactionModal } from './AddTransactionForm'
 import TxItem from './TxItem'
-import { CAT_ICONS, SOURCES, SOURCE_ICONS, fmt } from '../constants'
+import { CAT_ICONS, SOURCES, SOURCE_ICONS, MONTHS, fmt } from '../constants'
 
-export default function Transactions({ user, monthTransactions, monthLabel, changeMonth, addTransaction, updateTransaction, deleteTransaction }) {
+const TYPE_FILTERS = [
+  { value:'', label:'Wszystko' },
+  { value:'expense', label:'Wydatki' },
+  { value:'income', label:'Przychody' },
+  { value:'savings', label:'Oszczędności' },
+]
+
+function dayLabel(dateStr) {
+  const d = new Date(dateStr)
+  const t = new Date(); t.setHours(0,0,0,0)
+  const y = new Date(t); y.setDate(y.getDate() - 1)
+  const cmp = new Date(d); cmp.setHours(0,0,0,0)
+  if (cmp.getTime() === t.getTime()) return 'Dziś'
+  if (cmp.getTime() === y.getTime()) return 'Wczoraj'
+  return `${d.getDate()} ${MONTHS[d.getMonth()].toLowerCase()}`
+}
+
+export default function Transactions({
+  monthTransactions, monthLabel, changeMonth,
+  addTransaction, updateTransaction, deleteTransaction,
+}) {
+  const [adding, setAdding] = useState(false)
   const [typeF, setTypeF] = useState('')
   const [catF, setCatF] = useState('')
   const [srcF, setSrcF] = useState('')
+  const [q, setQ] = useState('')
 
-  const cats = [...new Set(monthTransactions.map(t => t.category).filter(Boolean))]
+  const cats = [...new Set(monthTransactions.map(t => t.category).filter(Boolean))].sort()
 
   const filtered = monthTransactions
     .filter(t => !typeF || t.type === typeF)
     .filter(t => !catF  || t.category === catF)
     .filter(t => !srcF  || t.payment_source === srcF)
+    .filter(t => {
+      if (!q.trim()) return true
+      const hay = `${t.name} ${t.category} ${t.subcategory || ''}`.toLowerCase()
+      return hay.includes(q.trim().toLowerCase())
+    })
 
-  // Podsumowanie wydatków per źródło (zawsze z całości, bez filtrów)
-  const expensesBySource = SOURCES.map(s => ({
-    source: s,
-    total: monthTransactions
-      .filter(t => t.type === 'expense' && t.payment_source === s)
-      .reduce((sum, t) => sum + t.amount, 0)
-  })).filter(s => s.total > 0)
+  const sum = filtered.reduce((s, t) => s + (t.type === 'income' ? t.amount : -t.amount), 0)
+  const hasFilters = typeF || catF || srcF || q.trim()
+
+  // Group by date, newest first
+  const groups = []
+  filtered.slice().sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(tx => {
+    const last = groups[groups.length - 1]
+    if (last && last.date === tx.date) last.items.push(tx)
+    else groups.push({ date: tx.date, items: [tx] })
+  })
 
   return (
     <div>
-      <MonthNav label={monthLabel} onChange={changeMonth} />
-      <div className="g2">
-        <div className="card">
-          <div className="card-title">Dodaj transakcję</div>
-          <AddTransactionForm onAdd={addTransaction} />
+      <div className="page-head">
+        <MonthNav label={monthLabel} onChange={changeMonth} />
+        <button className="btn-add" onClick={() => setAdding(true)}>+ Dodaj transakcję</button>
+      </div>
+
+      <div className="card">
+        <div className="filter-bar">
+          <input type="search" className="filter-search" value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Szukaj po nazwie lub kategorii…" />
+          <select value={catF} onChange={e => setCatF(e.target.value)}>
+            <option value="">Wszystkie kategorie</option>
+            {cats.map(c => <option key={c} value={c}>{CAT_ICONS[c] || ''} {c}</option>)}
+          </select>
+          <select value={srcF} onChange={e => setSrcF(e.target.value)}>
+            <option value="">Wszyscy płacący</option>
+            {SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICONS[s]} {s}</option>)}
+          </select>
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
-
-          {/* Podsumowanie per źródło */}
-          {expensesBySource.length > 0 && (
-            <div className="card">
-              <div className="card-title">Wydatki wg źródła finansowania</div>
-              <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
-                {expensesBySource.map(({ source, total }) => (
-                  <div key={source}
-                    onClick={() => setSrcF(srcF === source ? '' : source)}
-                    style={{
-                      flex: '1 1 120px',
-                      background: srcF === source ? 'var(--accent)' : 'var(--bg2)',
-                      color: srcF === source ? '#fff' : 'var(--text1)',
-                      borderRadius: 'var(--rs)',
-                      padding: '12px 16px',
-                      cursor: 'pointer',
-                      transition: 'background 0.15s',
-                    }}>
-                    <div style={{ fontSize: 20, marginBottom: 4 }}>{SOURCE_ICONS[source]} {source}</div>
-                    <div style={{ fontSize: 18, fontWeight: 700 }}>{fmt(total)}</div>
-                    <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>
-                      {monthTransactions.filter(t => t.type === 'expense' && t.payment_source === source).length} transakcji
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+        <div className="seg-row">
+          {TYPE_FILTERS.map(f => (
+            <button key={f.value} className={`seg ${typeF === f.value ? 'sel' : ''}`} onClick={() => setTypeF(f.value)}>
+              {f.label}
+            </button>
+          ))}
+          {hasFilters && (
+            <button className="seg clear" onClick={() => { setTypeF(''); setCatF(''); setSrcF(''); setQ('') }}>
+              Wyczyść filtry
+            </button>
           )}
+        </div>
 
-          {/* Lista transakcji */}
-          <div className="card" style={{ display:'flex', flexDirection:'column' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'1rem', flexWrap:'wrap', gap:8 }}>
-              <div className="card-title" style={{ marginBottom:0 }}>Wszystkie transakcje</div>
-              <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-                <select value={typeF} onChange={e => setTypeF(e.target.value)} style={{ width:'auto', padding:'6px 10px', fontSize:13 }}>
-                  <option value="">Wszystkie typy</option>
-                  <option value="expense">Wydatki</option>
-                  <option value="income">Przychody</option>
-                  <option value="savings">Oszczędności</option>
-                </select>
-                <select value={catF} onChange={e => setCatF(e.target.value)} style={{ width:'auto', padding:'6px 10px', fontSize:13 }}>
-                  <option value="">Wszystkie kategorie</option>
-                  {cats.map(c => <option key={c} value={c}>{CAT_ICONS[c] || ''} {c}</option>)}
-                </select>
-                <select value={srcF} onChange={e => setSrcF(e.target.value)} style={{ width:'auto', padding:'6px 10px', fontSize:13 }}>
-                  <option value="">Wszystkie źródła</option>
-                  {SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICONS[s] || ''} {s}</option>)}
-                </select>
+        <div className="list-summary">
+          <span>{filtered.length} {filtered.length === 1 ? 'transakcja' : 'transakcji'}</span>
+          <span className="mono" style={{ color: sum >= 0 ? 'var(--accent)' : 'var(--danger)', fontWeight:600 }}>
+            {sum >= 0 ? '+' : ''}{fmt(sum)}
+          </span>
+        </div>
+
+        <div className="tx-list" style={{ maxHeight:'none' }}>
+          {groups.length === 0
+            ? <div className="empty">
+                {hasFilters ? 'Nic nie pasuje do tych filtrów.' : 'Brak transakcji w tym miesiącu.'}
               </div>
-            </div>
-            <div className="tx-list" style={{ maxHeight:520 }}>
-              {filtered.length === 0
-                ? <div className="empty">Brak transakcji</div>
-                : filtered.map(tx => <TxItem key={tx.id} tx={tx} userId={user.id} onEdit={updateTransaction} onDelete={deleteTransaction} />)}
-            </div>
-          </div>
-
+            : groups.map(g => (
+                <div key={g.date}>
+                  <div className="day-head">
+                    <span>{dayLabel(g.date)}</span>
+                    <span className="mono">{fmt(g.items.filter(t => t.type !== 'income').reduce((s, t) => s + t.amount, 0))}</span>
+                  </div>
+                  <div className="tx-list">
+                    {g.items.map(tx => (
+                      <TxItem key={tx.id} tx={tx}
+                        onEdit={updateTransaction} onDelete={deleteTransaction} />
+                    ))}
+                  </div>
+                </div>
+              ))}
         </div>
       </div>
+
+      {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} />}
     </div>
   )
 }

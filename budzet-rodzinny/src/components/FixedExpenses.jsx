@@ -198,9 +198,9 @@ function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, saving
           : justSaved ? <span className="save-hint ok">zapisano</span>
           : plan > 0 ? (
             <button className={`pay-btn ${paid ? 'paid' : ''}`}
-              title={paid ? `W tym miesiącu zapisano już ${fmt(row.actual)}. Kliknij, żeby dopisać kolejną kwotę.` : 'Zapisz jako transakcję'}
+              title={paid ? `W tym miesiącu zapisano już ${fmt(row.actual)}. Kliknij, żeby dopisać kolejną kwotę.` : 'Oznacz jako zapłacone i zapisz transakcję'}
               onClick={() => onPay([row])}>
-              {paid ? '✓ Zapisane' : 'Zapłacone'}
+              {paid ? '✓ Zapłacone' : 'Oznacz'}
             </button>
           ) : null}
         {row.id && <button className="bdg-icon-btn danger" title="Usuń plan" onClick={() => { if (confirm(`Usunąć plan dla "${row.label}"?`)) onDelete(row.id, row.label) }}>×</button>}
@@ -245,7 +245,7 @@ function BudgetGroupBlock({ group, rows, reverseGood, onlyActive, localAmounts, 
           <div className="bdg-cell" style={{ gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'6px 10px 10px' }}>
             {missing.length > 0 && (
               <button className="btn-sm" onClick={() => onPay(missing)}>
-                Zapisz nieopłacone ({missing.length})
+                Oznacz jako zapłacone ({missing.length})
               </button>
             )}
             <button className="btn-sm" onClick={() => onAddNew(group)}>+ Nowa pozycja</button>
@@ -284,7 +284,7 @@ function PayModal({ group, items, onClose, onConfirm }) {
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <h3>{items.length === 1 ? 'Zapisz wydatek' : `Zapisz wydatki — ${group}`}</h3>
+          <h3>{items.length === 1 ? 'Oznacz jako zapłacone' : `Oznacz jako zapłacone — ${group}`}</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
@@ -327,7 +327,7 @@ function PayModal({ group, items, onClose, onConfirm }) {
         <div className="modal-footer">
           <button className="btn-outline" onClick={onClose}>Anuluj</button>
           <button className="btn-primary" onClick={confirm} disabled={busy || !chosen.length}>
-            {busy ? 'Zapisuję…' : `Zapisz ${fmt(total)}`}
+            {busy ? 'Zapisuję…' : `Oznacz zapłacone · ${fmt(total)}`}
           </button>
         </div>
       </div>
@@ -410,7 +410,9 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
       }, { silent: true })
       if (r) added++
     }
-    if (added) showToast(added === 1 ? `Zapisano: ${entries[0].row.label}` : `Zapisano ${added} pozycji`)
+    if (added) showToast(added === 1
+      ? `Oznaczono jako zapłacone: ${entries[0].row.label}`
+      : `Oznaczono ${added} pozycji jako zapłacone`)
   }
 
   const rowProps = { localAmounts, setLocalAmounts, savingKeys, onSaveRow: handleSaveRow, onDelete: deleteFixed, onPay: setPayItems }

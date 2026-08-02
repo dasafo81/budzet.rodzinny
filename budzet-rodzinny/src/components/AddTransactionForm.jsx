@@ -17,6 +17,25 @@ function dateNDaysAgo(n) {
   return d.toISOString().split('T')[0]
 }
 
+// The six category/subcategory pairs used most often lately — most entries repeat.
+function recentPairs(transactions, limit = 6) {
+  const counts = new Map()
+  transactions
+    .filter(t => t.type === 'expense' && t.category && t.subcategory)
+    .slice(0, 120)
+    .forEach(t => {
+      const key = `${t.category}|${t.subcategory}`
+      counts.set(key, (counts.get(key) || 0) + 1)
+    })
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key]) => {
+      const [category, subcategory] = key.split('|')
+      return { category, subcategory }
+    })
+}
+
 // A tile grid — used for picking a main category, an income source, or a savings goal.
 function TileGrid({ items, selected, onSelect }) {
   return (
@@ -34,7 +53,7 @@ function TileGrid({ items, selected, onSelect }) {
   )
 }
 
-export default function AddTransactionForm({ onAdd, onDone }) {
+export default function AddTransactionForm({ onAdd, onDone, transactions = [] }) {
   const [type, setType] = useState('expense')
   const [name, setName] = useState('')
   const [amount, setAmount] = useState('')
@@ -45,16 +64,25 @@ export default function AddTransactionForm({ onAdd, onDone }) {
   const [incomeCat, setIncomeCat] = useState('')
   const [savingsCat, setSavingsCat] = useState('')
   const [error, setError] = useState('')
+  const [dupWarning, setDupWarning] = useState(null)
   const [saving, setSaving] = useState(false)
 
   const amt = parseFloat(amount) || 0
+  const recent = recentPairs(transactions)
 
   const switchType = (t) => {
-    setType(t); setError('')
+    setType(t); setError(''); setDupWarning(null)
     setCategory(''); setSubcategory(''); setIncomeCat(''); setSavingsCat('')
   }
 
-  const handleSubmit = async () => {
+  const pickRecent = (r) => {
+    setType('expense')
+    setCategory(r.category)
+    setSubcategory(r.subcategory)
+    setError(''); setDupWarning(null)
+  }
+
+  const handleSubmit = async (opts = {}) => {
     setError('')
     if (!amt || amt <= 0) { setError('Podaj kwotę większą od zera.'); return }
     if (!date) { setError('Wybierz datę.'); return }
@@ -72,6 +100,20 @@ export default function AddTransactionForm({ onAdd, onDone }) {
       cat = category; subcat = subcategory
     }
 
+    // Two people share this budget, so the same purchase can easily get entered twice.
+    if (!opts.force) {
+      const dup = transactions.find(t =>
+        t.date === date &&
+        t.category === cat &&
+        (t.subcategory || '') === (subcat || '') &&
+        Math.abs(t.amount - amt) < 0.005
+      )
+      if (dup) {
+        setDupWarning({ name: dup.name, who: dup.user_name })
+        return
+      }
+    }
+
     setSaving(true)
     const ok = await onAdd({
       name: name.trim() || subcat || cat,
@@ -82,7 +124,7 @@ export default function AddTransactionForm({ onAdd, onDone }) {
     setSaving(false)
     if (ok) {
       setName(''); setAmount(''); setCategory(''); setSubcategory('')
-      setIncomeCat(''); setSavingsCat('')
+      setIncomeCat(''); setSavingsCat(''); setDupWarning(null)
       if (onDone) onDone()
     }
   }
@@ -95,6 +137,22 @@ export default function AddTransactionForm({ onAdd, onDone }) {
 
   return (
     <div className="form-stack">
+      {/* 0 — one-tap shortcuts for what gets entered most */}
+      {recent.length > 0 && (
+        <div className="ff">
+          <label>Ostatnio używane</label>
+          <div className="chips">
+            {recent.map(r => (
+              <button key={`${r.category}|${r.subcategory}`}
+                className={`chip ${type === 'expense' && category === r.category && subcategory === r.subcategory ? 'sel' : ''}`}
+                onClick={() => pickRecent(r)}>
+                {CAT_ICONS[r.category] || '📌'} {r.subcategory}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 1 — what kind of entry */}
       <div className="ttoggle t3">
         {['expense','income','savings'].map(t => (
@@ -199,12 +257,28 @@ export default function AddTransactionForm({ onAdd, onDone }) {
 
       {error && <div className="form-err">{error}</div>}
 
-      <button className="btn-primary" onClick={handleSubmit} disabled={saving}>{submitLabel}</button>
+      {dupWarning ? (
+        <div className="dup-warn">
+          <div className="dup-warn-txt">
+            Tego dnia zapisano już <strong>{fmt(amt)}</strong> w tej podkategorii
+            {dupWarning.name ? ` („${dupWarning.name}”` : ''}{dupWarning.who ? `, dodane przez: ${dupWarning.who})` : dupWarning.name ? ')' : ''}.
+            Dodać mimo to?
+          </div>
+          <div className="dup-warn-btns">
+            <button className="btn-outline" onClick={() => setDupWarning(null)}>Anuluj</button>
+            <button className="btn-primary" onClick={() => handleSubmit({ force: true })} disabled={saving}>
+              {saving ? 'Zapisuję…' : 'Tak, dodaj'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button className="btn-primary" onClick={() => handleSubmit()} disabled={saving}>{submitLabel}</button>
+      )}
     </div>
   )
 }
 
-export function AddTransactionModal({ onAdd, onClose }) {
+export function AddTransactionModal({ onAdd, onClose, transactions = [] }) {
   return (
     <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
@@ -212,7 +286,7 @@ export function AddTransactionModal({ onAdd, onClose }) {
           <h3>Dodaj transakcję</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
-        <AddTransactionForm onAdd={onAdd} onDone={onClose} />
+        <AddTransactionForm onAdd={onAdd} onDone={onClose} transactions={transactions} />
       </div>
     </div>
   )

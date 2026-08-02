@@ -5,7 +5,7 @@ import TxItem from './TxItem'
 import { CAT_COLORS, CAT_ICONS, SOURCES, SOURCE_ICONS, fmt } from '../constants'
 
 export default function Overview({
-  monthTransactions, fixedExpenses, monthLabel, changeMonth,
+  transactions, monthTransactions, fixedExpenses, monthLabel, changeMonth,
   addTransaction, updateTransaction, deleteTransaction,
 }) {
   const [adding, setAdding] = useState(false)
@@ -46,7 +46,9 @@ export default function Overview({
     <div>
       <div className="page-head">
         <MonthNav label={monthLabel} onChange={changeMonth} />
-        <button className="btn-add" onClick={() => setAdding(true)}>+ Dodaj transakcję</button>
+        <button className="btn-add" onClick={() => setAdding(true)} aria-label="Dodaj transakcję">
+          <span className="btn-add-plus">+</span><span className="btn-add-text">Dodaj transakcję</span>
+        </button>
       </div>
 
       <div className="g3" style={{ marginBottom:'1rem' }}>
@@ -142,7 +144,7 @@ export default function Overview({
         </div>
       </div>
 
-      {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} />}
+      {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} transactions={transactions} />}
     </div>
   )
 }

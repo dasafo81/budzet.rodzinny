@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import MonthNav from './MonthNav'
-import { CATEGORIES, CAT_ICONS, FX_GROUPS, SAVINGS_CATS, SAVINGS_NAMES, INCOME_CATS, fmt } from '../constants'
+import { CATEGORIES, CAT_ICONS, FX_GROUPS, SAVINGS_CATS, SAVINGS_NAMES, INCOME_CATS, SOURCES, SOURCE_ICONS, fmt } from '../constants'
 
 const ALL_GROUPS = ['PRZYCHÓD', ...FX_GROUPS]
 
@@ -155,7 +155,7 @@ function colorFor(pct, reverseGood) {
   return pct > 100 ? 'var(--danger)' : pct > 80 ? 'var(--warn)' : 'var(--accent)'
 }
 
-function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddSingleToTx }) {
+function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onPay }) {
   const key = row.group + '|' + row.name
   const localVal = localAmounts[key]
   const plan = localVal !== undefined ? (parseFloat(localVal) || 0) : row.plan
@@ -163,6 +163,18 @@ function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, saving
   const diff = reverseGood ? (row.actual - plan) : (plan - row.actual)
   const good = diff >= 0
   const color = plan > 0 ? colorFor(pct, reverseGood) : (good ? 'var(--accent)' : 'var(--danger)')
+  const [dirty, setDirty] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+
+  // Plans save themselves when the field loses focus — no save button to forget.
+  const handleBlur = async () => {
+    if (!dirty) return
+    setDirty(false)
+    const ok = await onSaveRow(row, localVal)
+    if (ok !== false) { setJustSaved(true); setTimeout(() => setJustSaved(false), 1600) }
+  }
+
+  const paid = row.actual > 0
 
   return (
     <div className="bdg-row-wrap">
@@ -172,7 +184,9 @@ function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, saving
       </div>
       <div className="bdg-cell right">
         <input type="number" className="fx-inp bdg-inp" defaultValue={row.plan || 0}
-          onChange={e => setLocalAmounts(a => ({ ...a, [key]: e.target.value }))} />
+          onChange={e => { setLocalAmounts(a => ({ ...a, [key]: e.target.value })); setDirty(true) }}
+          onBlur={handleBlur}
+          onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} />
       </div>
       <div className="bdg-cell right mono">{fmt(row.actual)}</div>
       <div className="bdg-cell right mono" style={{ color: good ? 'var(--accent)' : 'var(--danger)' }}>
@@ -180,15 +194,22 @@ function BudgetItemRow({ row, reverseGood, localAmounts, setLocalAmounts, saving
       </div>
       <PctCell plan={plan} pct={pct} colorVar={color} />
       <div className="bdg-cell bdg-actions">
-        <button className="bdg-icon-btn" disabled={savingKeys[key]} title="Zapisz plan" onClick={() => onSaveRow(row, localVal)}>{savingKeys[key] ? '…' : '💾'}</button>
-        <button className="bdg-icon-btn" title="Dodaj jako transakcję" onClick={() => onAddSingleToTx(row, plan)}>➕</button>
+        {savingKeys[key] ? <span className="save-hint">zapisuję…</span>
+          : justSaved ? <span className="save-hint ok">zapisano</span>
+          : plan > 0 ? (
+            <button className={`pay-btn ${paid ? 'paid' : ''}`}
+              title={paid ? `W tym miesiącu zapisano już ${fmt(row.actual)}. Kliknij, żeby dopisać kolejną kwotę.` : 'Zapisz jako transakcję'}
+              onClick={() => onPay([row])}>
+              {paid ? '✓ Zapisane' : 'Zapłacone'}
+            </button>
+          ) : null}
         {row.id && <button className="bdg-icon-btn danger" title="Usuń plan" onClick={() => { if (confirm(`Usunąć plan dla "${row.label}"?`)) onDelete(row.id, row.label) }}>×</button>}
       </div>
     </div>
   )
 }
 
-function BudgetGroupBlock({ group, rows, reverseGood, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onAddGroupToTx, onAddSingleToTx, onAddNew }) {
+function BudgetGroupBlock({ group, rows, reverseGood, onlyActive, localAmounts, setLocalAmounts, savingKeys, onSaveRow, onDelete, onPay, onAddNew }) {
   const [open, setOpen] = useState(true)
   const totalPlan = rows.reduce((s, r) => s + r.plan, 0)
   const totalActual = rows.reduce((s, r) => s + r.actual, 0)
@@ -196,6 +217,11 @@ function BudgetGroupBlock({ group, rows, reverseGood, localAmounts, setLocalAmou
   const diff = reverseGood ? (totalActual - totalPlan) : (totalPlan - totalActual)
   const good = diff >= 0
   const color = totalPlan > 0 ? colorFor(pct, reverseGood) : (good ? 'var(--accent)' : 'var(--danger)')
+
+  const visibleRows = onlyActive ? rows.filter(r => r.plan > 0 || r.actual > 0) : rows
+  const missing = rows.filter(r => r.plan > 0 && r.actual === 0)
+
+  if (onlyActive && visibleRows.length === 0) return null
 
   return (
     <>
@@ -209,20 +235,103 @@ function BudgetGroupBlock({ group, rows, reverseGood, localAmounts, setLocalAmou
         <PctCell plan={totalPlan} pct={pct} colorVar={color} />
         <div className="bdg-cell bdg-toggle">{open ? '▾' : '▸'}</div>
       </div>
-      {open && rows.map(row => (
+      {open && visibleRows.map(row => (
         <BudgetItemRow key={row.name} row={row} reverseGood={reverseGood}
           localAmounts={localAmounts} setLocalAmounts={setLocalAmounts} savingKeys={savingKeys}
-          onSaveRow={onSaveRow} onDelete={onDelete} onAddSingleToTx={onAddSingleToTx} />
+          onSaveRow={onSaveRow} onDelete={onDelete} onPay={onPay} />
       ))}
       {open && (
         <div className="bdg-row-wrap bdg-groupactions">
           <div className="bdg-cell" style={{ gridColumn:'1 / -1', display:'flex', gap:8, flexWrap:'wrap', padding:'6px 10px 10px' }}>
-            <button className="btn-sm" onClick={() => onAddGroupToTx(group, rows)}>+ Dodaj wszystkie do transakcji</button>
+            {missing.length > 0 && (
+              <button className="btn-sm" onClick={() => onPay(missing)}>
+                Zapisz nieopłacone ({missing.length})
+              </button>
+            )}
             <button className="btn-sm" onClick={() => onAddNew(group)}>+ Nowa pozycja</button>
           </div>
         </div>
       )}
     </>
+  )
+}
+
+// Turns planned positions into real transactions — with amounts you can correct first,
+// so a 300 zł plan doesn't get booked when the bill actually came to 340 zł.
+function PayModal({ group, items, onClose, onConfirm }) {
+  const [rows, setRows] = useState(
+    items.map(r => ({ ...r, checked: true, amount: String(r.plan || '') }))
+  )
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0])
+  const [source, setSource] = useState('Porters')
+  const [busy, setBusy] = useState(false)
+
+  const setRow = (name, patch) =>
+    setRows(rs => rs.map(r => (r.name === name ? { ...r, ...patch } : r)))
+
+  const chosen = rows.filter(r => r.checked && (parseFloat(r.amount) || 0) > 0)
+  const total = chosen.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
+
+  const confirm = async () => {
+    if (!chosen.length) return
+    setBusy(true)
+    await onConfirm(chosen.map(r => ({ row: r, amount: parseFloat(r.amount) || 0 })), { date, source })
+    setBusy(false)
+    onClose()
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>{items.length === 1 ? 'Zapisz wydatek' : `Zapisz wydatki — ${group}`}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="pay-list">
+          {rows.map(r => {
+            const already = r.actual > 0
+            return (
+              <div key={r.name} className={`pay-row ${r.checked ? '' : 'off'}`}>
+                <input type="checkbox" checked={r.checked}
+                  onChange={e => setRow(r.name, { checked: e.target.checked })} />
+                <div className="pay-name">
+                  {r.label}
+                  {already && <span className="pay-note">zapisano już {fmt(r.actual)}</span>}
+                </div>
+                <input type="number" className="fx-inp pay-amt" value={r.amount} min="0" step="0.01"
+                  onChange={e => setRow(r.name, { amount: e.target.value })} />
+              </div>
+            )
+          })}
+        </div>
+
+        <div className="form-row" style={{ marginTop:14 }}>
+          <div className="ff">
+            <label>Data</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+          </div>
+          <div className="ff">
+            <label>Źródło finansowania</label>
+            <select value={source} onChange={e => setSource(e.target.value)}>
+              {SOURCES.map(s => <option key={s} value={s}>{SOURCE_ICONS[s]} {s}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="pay-total">
+          <span>{chosen.length} {chosen.length === 1 ? 'pozycja' : 'pozycji'}</span>
+          <span className="mono" style={{ fontWeight:600 }}>{fmt(total)}</span>
+        </div>
+
+        <div className="modal-footer">
+          <button className="btn-outline" onClick={onClose}>Anuluj</button>
+          <button className="btn-primary" onClick={confirm} disabled={busy || !chosen.length}>
+            {busy ? 'Zapisuję…' : `Zapisz ${fmt(total)}`}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -241,6 +350,8 @@ function TableHeader({ planLabel }) {
 
 export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDate, monthLabel, changeMonth, saveFixed, deleteFixed, addTransaction, showToast }) {
   const [modal, setModal] = useState(null) // null | group string
+  const [payItems, setPayItems] = useState(null) // null | array of rows
+  const [onlyActive, setOnlyActive] = useState(true)
   const [localAmounts, setLocalAmounts] = useState({})
   const [savingKeys, setSavingKeys] = useState({})
 
@@ -281,42 +392,31 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
   const handleSaveRow = async (row, val) => {
     const key = row.group + '|' + row.name
     const amount = val !== undefined ? (parseFloat(val) || 0) : row.plan
+    if (amount === row.plan) return true
     setSavingKeys(s => ({ ...s, [key]: true }))
-    await saveFixed({ id: row.id, group_name: row.group, name: row.name, amount })
+    const ok = await saveFixed({ id: row.id, group_name: row.group, name: row.name, amount }, { silent: true })
     setSavingKeys(s => ({ ...s, [key]: false }))
+    return ok
   }
 
-  const handleAddSingleToTx = async (row, plan) => {
-    if (!plan || plan <= 0) { showToast('Ustaw najpierw kwotę planu', 'error'); return }
-    const ok = await addTransaction({
-      name: row.label, amount: plan,
-      date: new Date().toISOString().split('T')[0],
-      type: row.group === 'OSZCZĘDZANIE' ? 'savings' : row.group === 'PRZYCHÓD' ? 'income' : 'expense',
-      category: row.group, subcategory: row.name,
-      payment_source: 'Porters',
-    })
-    if (ok) showToast(`Dodano: ${row.label}`)
-  }
-
-  const handleAddGroupToTx = async (group, groupRows) => {
-    const withPlan = groupRows.filter(r => r.plan > 0)
-    if (!withPlan.length) { showToast('Brak kwot planu do dodania', 'error'); return }
-    let ok = true
-    for (const row of withPlan) {
+  const handlePayConfirm = async (entries, { date, source }) => {
+    let added = 0
+    for (const { row, amount } of entries) {
       const r = await addTransaction({
-        name: row.label, amount: row.plan,
-        date: new Date().toISOString().split('T')[0],
-        type: group === 'OSZCZĘDZANIE' ? 'savings' : group === 'PRZYCHÓD' ? 'income' : 'expense',
-        category: group, subcategory: row.name,
-        payment_source: 'Porters',
-      })
-      if (!r) ok = false
+        name: row.label, amount, date,
+        type: row.group === 'OSZCZĘDZANIE' ? 'savings' : row.group === 'PRZYCHÓD' ? 'income' : 'expense',
+        category: row.group, subcategory: row.name,
+        payment_source: source,
+      }, { silent: true })
+      if (r) added++
     }
-    if (ok) showToast(`Dodano ${withPlan.length} pozycji`)
+    if (added) showToast(added === 1 ? `Zapisano: ${entries[0].row.label}` : `Zapisano ${added} pozycji`)
   }
 
-  const rowProps = { localAmounts, setLocalAmounts, savingKeys, onSaveRow: handleSaveRow, onDelete: deleteFixed, onAddSingleToTx: handleAddSingleToTx }
+  const rowProps = { localAmounts, setLocalAmounts, savingKeys, onSaveRow: handleSaveRow, onDelete: deleteFixed, onPay: setPayItems }
   const handleAddNewIncome = () => setModal('PRZYCHÓD')
+
+  const hiddenCount = rows.filter(r => r.plan === 0 && r.actual === 0).length
 
   return (
     <div>
@@ -371,11 +471,18 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
         </div>
       )}
 
-      <div className="card-title" style={{ marginBottom:8 }}>Przychody</div>
+      <div className="table-head">
+        <div className="card-title" style={{ marginBottom:0 }}>Przychody</div>
+        <label className="toggle-line">
+          <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} />
+          Pokaż tylko aktywne
+          {onlyActive && hiddenCount > 0 && <span className="toggle-note">ukryto {hiddenCount}</span>}
+        </label>
+      </div>
       <div className="bdg-scroll" style={{ marginBottom:'1.5rem' }}>
         <div className="bdg-table">
           <TableHeader planLabel="Plan przychodów" />
-          {incomeRows.map(row => (
+          {(onlyActive ? incomeRows.filter(r => r.plan > 0 || r.actual > 0) : incomeRows).map(row => (
             <BudgetItemRow key={row.name} row={row} reverseGood={true} {...rowProps} />
           ))}
           <div className="bdg-row-wrap bdg-groupactions">
@@ -393,8 +500,8 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
           {expenseGroupNames.map(group => (
             <BudgetGroupBlock key={group} group={group} rows={byGroup[group] || []}
               reverseGood={group === 'OSZCZĘDZANIE'}
+              onlyActive={onlyActive}
               {...rowProps}
-              onAddGroupToTx={handleAddGroupToTx}
               onAddNew={g => setModal(g)} />
           ))}
         </div>
@@ -402,6 +509,11 @@ export default function FixedExpenses({ fixedExpenses, monthTransactions, viewDa
 
       {modal !== null && (
         <FxModal preGroup={modal || 'DOM'} onSave={saveFixed} onClose={() => setModal(null)} />
+      )}
+
+      {payItems && payItems.length > 0 && (
+        <PayModal group={payItems[0].group} items={payItems}
+          onClose={() => setPayItems(null)} onConfirm={handlePayConfirm} />
       )}
     </div>
   )

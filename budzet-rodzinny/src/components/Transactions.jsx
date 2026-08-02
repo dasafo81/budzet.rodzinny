@@ -22,7 +22,7 @@ function dayLabel(dateStr) {
 }
 
 export default function Transactions({
-  monthTransactions, monthLabel, changeMonth,
+  transactions, monthTransactions, monthLabel, changeMonth,
   addTransaction, updateTransaction, deleteTransaction,
 }) {
   const [adding, setAdding] = useState(false)
@@ -58,7 +58,9 @@ export default function Transactions({
     <div>
       <div className="page-head">
         <MonthNav label={monthLabel} onChange={changeMonth} />
-        <button className="btn-add" onClick={() => setAdding(true)}>+ Dodaj transakcję</button>
+        <button className="btn-add" onClick={() => setAdding(true)} aria-label="Dodaj transakcję">
+          <span className="btn-add-plus">+</span><span className="btn-add-text">Dodaj transakcję</span>
+        </button>
       </div>
 
       <div className="card">
@@ -117,7 +119,7 @@ export default function Transactions({
         </div>
       </div>
 
-      {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} />}
+      {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} transactions={transactions} />}
     </div>
   )
 }

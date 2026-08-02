@@ -10,11 +10,11 @@ import Toast from './components/Toast'
 import { MONTHS } from './constants'
 
 const TABS = [
-  { id: 'overview', label: 'Przegląd' },
-  { id: 'transactions', label: 'Transakcje' },
-  { id: 'fixed', label: 'Budżet' },
-  { id: 'savings', label: 'Oszczędności' },
-  { id: 'ai', label: 'Analiza AI' },
+  { id: 'overview', label: 'Przegląd', icon: '📊' },
+  { id: 'transactions', label: 'Transakcje', icon: '📝' },
+  { id: 'fixed', label: 'Budżet', icon: '🎯' },
+  { id: 'savings', label: 'Oszczędności', icon: '💰' },
+  { id: 'ai', label: 'Analiza AI', icon: '🤖' },
 ]
 
 export default function App() {
@@ -26,8 +26,8 @@ export default function App() {
   const [fixedExpenses, setFixedExpenses] = useState([])
   const [viewDate, setViewDate] = useState(() => { const d = new Date(); d.setDate(1); return d })
 
-  const showToast = useCallback((msg, type = '') => {
-    setToast({ msg, type, id: Date.now() })
+  const showToast = useCallback((msg, type = '', action = null) => {
+    setToast({ msg, type, action, id: Date.now() })
   }, [])
 
   useEffect(() => {
@@ -64,16 +64,25 @@ export default function App() {
     return () => sb.removeChannel(channel)
   }, [user, loadTransactions, loadFixed])
 
-  const addTransaction = useCallback(async (row) => {
-    const { error } = await sb.from('transactions').insert([{
+  const undoAdd = useCallback(async (id, name) => {
+    const { error } = await sb.from('transactions').delete().eq('id', id)
+    if (error) { showToast('Nie udało się cofnąć: ' + error.message, 'error'); return }
+    showToast('Cofnięto: ' + name)
+  }, [showToast])
+
+  const addTransaction = useCallback(async (row, opts = {}) => {
+    const { data, error } = await sb.from('transactions').insert([{
       ...row,
       user_id: user.id,
       user_name: user.user_metadata?.name || user.email.split('@')[0],
-    }])
+    }]).select().single()
     if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
-    showToast('Dodano: ' + row.name)
-    return true
-  }, [user, showToast])
+    if (!opts.silent) {
+      showToast('Dodano: ' + row.name, '',
+        data?.id ? { label: 'Cofnij', onClick: () => undoAdd(data.id, row.name) } : null)
+    }
+    return data || true
+  }, [user, showToast, undoAdd])
 
   const updateTransaction = useCallback(async (id, updates) => {
     const { error } = await sb.from('transactions').update(updates).eq('id', id)
@@ -89,7 +98,7 @@ export default function App() {
     return true
   }, [showToast])
 
-  const saveFixed = useCallback(async (row) => {
+  const saveFixed = useCallback(async (row, opts = {}) => {
     let error
     if (row.id) {
       const r = await sb.from('fixed_expenses').update({ name: row.name, group_name: row.group_name, amount: row.amount }).eq('id', row.id)
@@ -99,7 +108,7 @@ export default function App() {
       error = r.error
     }
     if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
-    showToast('Zapisano: ' + row.name)
+    if (!opts.silent) showToast('Zapisano: ' + row.name)
     await loadFixed()
     return true
   }, [showToast, loadFixed])
@@ -138,7 +147,10 @@ export default function App() {
       </div>
       <div className="nav-tabs">
         {TABS.map(t => (
-          <button key={t.id} className={`nav-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>{t.label}</button>
+          <button key={t.id} className={`nav-tab ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <span className="nav-tab-ico">{t.icon}</span>
+            <span className="nav-tab-lbl">{t.label}</span>
+          </button>
         ))}
       </div>
       <div className="main">

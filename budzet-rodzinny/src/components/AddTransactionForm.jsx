@@ -21,7 +21,9 @@ function dateNDaysAgo(n) {
 function recentPairs(transactions, limit = 6) {
   const counts = new Map()
   transactions
-    .filter(t => t.type === 'expense' && t.category && t.subcategory)
+    // only pairs that still exist in the current category list — an old/renamed
+    // category from a past transaction shouldn't produce a shortcut that crashes
+    .filter(t => t.type === 'expense' && t.category && t.subcategory && CATEGORIES[t.category]?.includes(t.subcategory))
     .slice(0, 120)
     .forEach(t => {
       const key = `${t.category}|${t.subcategory}`
@@ -192,7 +194,7 @@ export default function AddTransactionForm({ onAdd, onDone, transactions = [] })
                 <button className="picked-change" onClick={() => { setCategory(''); setSubcategory('') }}>Zmień</button>
               </div>
               <div className="chips sub-chips">
-                {CATEGORIES[category].map(sub => (
+                {(CATEGORIES[category] || []).map(sub => (
                   <button key={sub}
                     className={`chip ${subcategory === sub ? 'sel' : ''}`}
                     onClick={() => { setSubcategory(sub); setError('') }}>

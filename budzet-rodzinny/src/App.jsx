@@ -9,6 +9,11 @@ import AIPanel from './components/AIPanel'
 import Toast from './components/Toast'
 import { MONTHS } from './constants'
 
+// Supabase (detectSessionInUrl) czyści hash zaraz po starcie, więc czytamy go
+// synchronicznie przy ładowaniu modułu, zanim zdąży zniknąć.
+const RECOVERY_IN_URL = typeof window !== 'undefined' &&
+  window.location.hash.includes('type=recovery')
+
 const TABS = [
   { id: 'overview', label: 'Przegląd', icon: '📊' },
   { id: 'transactions', label: 'Transakcje', icon: '📝' },
@@ -20,6 +25,7 @@ const TABS = [
 export default function App() {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [recovery, setRecovery] = useState(RECOVERY_IN_URL)
   const [tab, setTab] = useState('overview')
   const [toast, setToast] = useState(null)
   const [transactions, setTransactions] = useState([])
@@ -35,7 +41,8 @@ export default function App() {
       setUser(session?.user ?? null)
       setLoading(false)
     })
-    const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
       setUser(session?.user ?? null)
     })
     return () => subscription.unsubscribe()
@@ -132,6 +139,9 @@ export default function App() {
   })
 
   if (loading) return <div className="center-screen">Ładowanie...</div>
+  // Link z maila tworzy sesję, więc user jest już ustawiony — bez tego warunku
+  // aplikacja wpuszczałaby do środka, a hasło nigdy by się nie zmieniło.
+  if (recovery) return <Auth recoveryMode onRecoveryDone={() => setRecovery(false)} />
   if (!user) return <Auth />
 
   const panelProps = { user, transactions, monthTransactions, fixedExpenses, viewDate, monthLabel, changeMonth, addTransaction, updateTransaction, deleteTransaction, saveFixed, deleteFixed, showToast }

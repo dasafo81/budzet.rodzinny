@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { sb } from '../supabase'
 
-export default function Auth() {
+export default function Auth({ recoveryMode = false, onRecoveryDone }) {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -10,16 +10,10 @@ export default function Auth() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [isRecovery, setIsRecovery] = useState(false)
-
-  useEffect(() => {
-    // Sprawdź czy użytkownik kliknął w link resetowania hasła
-    const hash = window.location.hash
-    if (hash.includes('type=recovery') || hash.includes('type=magiclink')) {
-      setIsRecovery(true)
-      setError('Ustaw nowe hasło dla swojego konta')
-    }
-  }, [])
+  // Zapasowe wykrycie w adresie, gdyby App nie zdążył przechwycić zdarzenia.
+  const [isRecovery] = useState(() => recoveryMode ||
+    window.location.hash.includes('type=recovery') ||
+    window.location.hash.includes('type=magiclink'))
 
   const handle = async () => {
     setError(''); setLoading(true)
@@ -59,7 +53,13 @@ export default function Auth() {
       setLoading(false)
     } else {
       setError('Hasło zostało zmienione! Za chwilę zostaniesz zalogowany.')
-      setTimeout(() => window.location.href = '/', 2000)
+      // Czyścimy token z adresu, żeby odświeżenie strony nie wracało tu ponownie.
+      window.history.replaceState(null, '', window.location.pathname)
+      setTimeout(() => {
+        setLoading(false)
+        if (onRecoveryDone) onRecoveryDone()
+        else window.location.href = '/'
+      }, 1500)
     }
   }
 

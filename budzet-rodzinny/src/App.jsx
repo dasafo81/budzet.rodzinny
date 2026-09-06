@@ -42,7 +42,14 @@ export default function App() {
       setLoading(false)
     })
     const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-      if (event === 'PASSWORD_RECOVERY') setRecovery(true)
+      if (event === 'PASSWORD_RECOVERY') {
+        setRecovery(true)
+        // Supabase już wykorzystał token z hasha do utworzenia sesji, więc możemy
+        // go bezpiecznie wyczyścić z adresu od razu — nawet jeśli użytkownik nie
+        // dokończy zmiany hasła. Inaczej hash zostaje "przyklejony" w tej karcie
+        // i przy kolejnej wizycie znowu wymusza tryb resetu zamiast logowania.
+        window.history.replaceState(null, '', window.location.pathname)
+      }
       setUser(session?.user ?? null)
     })
     return () => subscription.unsubscribe()

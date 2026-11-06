@@ -353,3 +353,6 @@ input:focus, select:focus, textarea:focus { outline:none; border-color:var(--acc
 .imp-flags { display:flex; gap:4px; flex-basis:100%; }
 .imp-flag { font-size:11px; padding:2px 8px; border-radius:20px; background:var(--surface2); color:var(--text2); }
 .imp-flag.warn { background:var(--warn-l); color:var(--text); }
+.imp-del { margin-left:auto; background:none; border:1px solid var(--border2); border-radius:var(--rs); cursor:pointer; padding:5px 9px; font-size:14px; line-height:1; }
+.imp-del:hover { background:var(--danger-l); border-color:var(--danger); }
+.imp-row input[type=checkbox] { width:22px; height:22px; }

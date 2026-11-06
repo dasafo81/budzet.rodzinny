@@ -105,6 +105,9 @@ export default function StatementImport({ transactions, onImport, onClose }) {
 
         {(stage === 'review' || stage === 'saving') && (
           <>
+            <div className="imp-hint" style={{ marginBottom: 10 }}>
+              Sprawdź listę: każde pole możesz poprawić. Odznacz wiersz, żeby go nie importować, albo usuń go przyciskiem 🗑.
+            </div>
             <div className="imp-top">
               <div className="ff">
                 <label>Źródło finansowania (dla wszystkich)</label>
@@ -123,6 +126,11 @@ export default function StatementImport({ transactions, onImport, onClose }) {
               <div className="imp-bulk">
                 <button className="seg" onClick={() => setRows(rs => rs.map(r => ({ ...r, selected: !!r.date && r.amount > 0 })))}>Zaznacz wszystkie</button>
                 <button className="seg" onClick={() => setRows(rs => rs.map(r => ({ ...r, selected: false })))}>Odznacz wszystkie</button>
+                {rows.length > selected.length && (
+                  <button className="seg clear" onClick={() => setRows(rs => rs.filter(r => r.selected))}>
+                    🗑 Usuń odznaczone ({rows.length - selected.length})
+                  </button>
+                )}
               </div>
             </div>
 
@@ -157,6 +165,8 @@ export default function StatementImport({ transactions, onImport, onClose }) {
                       {SAVINGS_CATS.map(s => <option key={s} value={s}>{SAVINGS_NAMES[s] || s}</option>)}
                     </select>
                   )}
+                  <button className="imp-del" title="Usuń z listy" aria-label={`Usuń ${r.name} z listy`}
+                    onClick={() => setRows(rs => rs.filter(x => x.id !== r.id))}>🗑</button>
                   {(r.duplicate || r.internal || !r.date) && (
                     <span className="imp-flags">
                       {r.duplicate && <span className="imp-flag warn">możliwy duplikat</span>}

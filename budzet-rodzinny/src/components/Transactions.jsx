@@ -2,6 +2,7 @@ import { useState } from 'react'
 import MonthNav from './MonthNav'
 import { AddTransactionModal } from './AddTransactionForm'
 import TxItem from './TxItem'
+import StatementImport from './StatementImport'
 import { CAT_ICONS, SOURCES, SOURCE_ICONS, MONTHS, fmt } from '../constants'
 
 const TYPE_FILTERS = [
@@ -23,9 +24,10 @@ function dayLabel(dateStr) {
 
 export default function Transactions({
   transactions, monthTransactions, monthLabel, changeMonth,
-  addTransaction, updateTransaction, deleteTransaction,
+  addTransaction, addTransactions, updateTransaction, deleteTransaction,
 }) {
   const [adding, setAdding] = useState(false)
+  const [importing, setImporting] = useState(false)
   const [typeF, setTypeF] = useState('')
   const [catF, setCatF] = useState('')
   const [srcF, setSrcF] = useState('')
@@ -58,9 +60,14 @@ export default function Transactions({
     <div>
       <div className="page-head">
         <MonthNav label={monthLabel} onChange={changeMonth} />
-        <button className="btn-add" onClick={() => setAdding(true)} aria-label="Dodaj transakcję">
-          <span className="btn-add-plus">+</span><span className="btn-add-text">Dodaj transakcję</span>
-        </button>
+        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+          <button className="btn-ghost" onClick={() => setImporting(true)} aria-label="Importuj wyciąg PDF">
+            📄 <span className="btn-add-text">Importuj wyciąg PDF</span>
+          </button>
+          <button className="btn-add" onClick={() => setAdding(true)} aria-label="Dodaj transakcję">
+            <span className="btn-add-plus">+</span><span className="btn-add-text">Dodaj transakcję</span>
+          </button>
+        </div>
       </div>
 
       <div className="card">
@@ -120,6 +127,7 @@ export default function Transactions({
       </div>
 
       {adding && <AddTransactionModal onAdd={addTransaction} onClose={() => setAdding(false)} transactions={transactions} />}
+      {importing && <StatementImport transactions={transactions} onImport={addTransactions} onClose={() => setImporting(false)} />}
     </div>
   )
 }

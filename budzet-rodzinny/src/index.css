@@ -335,3 +335,21 @@ input:focus, select:focus, textarea:focus { outline:none; border-color:var(--acc
 @media (max-width:420px) {
   .bdg-table { grid-template-columns:minmax(140px,2fr) 84px 84px 84px 60px 84px; min-width:620px; }
 }
+
+/* ── Import wyciągu PDF ── */
+.modal-import { max-width:960px; }
+.imp-hint { font-size:12px; color:var(--text3); line-height:1.5; }
+.imp-top { display:flex; flex-direction:column; gap:10px; margin-bottom:12px; }
+.imp-sum { display:flex; justify-content:space-between; font-size:13px; color:var(--text2); }
+.imp-bulk { display:flex; gap:6px; }
+.imp-list { display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto; }
+.imp-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:8px; border:1px solid var(--border); border-radius:var(--rs); background:var(--bg); }
+.imp-row.off { opacity:.5; }
+.imp-row input[type=checkbox] { width:18px; height:18px; flex:none; }
+.imp-row select, .imp-row input[type=text], .imp-row input[type=number], .imp-row input[type=date] { width:auto; padding:6px 8px; font-size:13px; }
+.imp-name { flex:1 1 160px; min-width:120px; }
+.imp-amt { width:90px !important; }
+.imp-date { width:130px !important; }
+.imp-flags { display:flex; gap:4px; flex-basis:100%; }
+.imp-flag { font-size:11px; padding:2px 8px; border-radius:20px; background:var(--surface2); color:var(--text2); }
+.imp-flag.warn { background:var(--warn-l); color:var(--text); }

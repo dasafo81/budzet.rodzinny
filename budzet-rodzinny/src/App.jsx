@@ -98,6 +98,16 @@ export default function App() {
     return data || true
   }, [user, showToast, undoAdd])
 
+  // Zbiorczy zapis (np. import wyciągu) — jedno zapytanie, więc albo wszystkie wiersze, albo żaden.
+  const addTransactions = useCallback(async (rows) => {
+    if (!rows.length) return false
+    const user_name = user.user_metadata?.name || user.email.split('@')[0]
+    const { error } = await sb.from('transactions').insert(rows.map(r => ({ ...r, user_id: user.id, user_name })))
+    if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
+    showToast(`Zaimportowano ${rows.length} ${rows.length === 1 ? 'transakcję' : 'transakcji'}`)
+    return true
+  }, [user, showToast])
+
   const updateTransaction = useCallback(async (id, updates) => {
     const { error } = await sb.from('transactions').update(updates).eq('id', id)
     if (error) { showToast('Błąd: ' + error.message, 'error'); return false }
@@ -151,7 +161,7 @@ export default function App() {
   if (recovery) return <Auth recoveryMode onRecoveryDone={() => setRecovery(false)} />
   if (!user) return <Auth />
 
-  const panelProps = { user, transactions, monthTransactions, fixedExpenses, viewDate, monthLabel, changeMonth, addTransaction, updateTransaction, deleteTransaction, saveFixed, deleteFixed, showToast }
+  const panelProps = { user, transactions, monthTransactions, fixedExpenses, viewDate, monthLabel, changeMonth, addTransaction, addTransactions, updateTransaction, deleteTransaction, saveFixed, deleteFixed, showToast }
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--bg)' }}>

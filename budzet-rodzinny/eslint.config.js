@@ -26,4 +26,9 @@ export default defineConfig([
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // funkcje serverless Vercela działają w Node, nie w przeglądarce
+    files: ['api/**/*.js'],
+    languageOptions: { globals: globals.node },
+  },
 ])

@@ -117,12 +117,12 @@ export default async function handler(req, res) {
         max_tokens: MAX_TOKENS,
         system: buildSystem({ categories: body.categories, incomeCats, savingsCats, examples }),
         tools: [TOOL],
-        tool_choice: { type: 'tool', name: TOOL.name },
+        tool_choice: { type: 'auto' }, // część modeli nie obsługuje wymuszania narzędzia (type: tool/any)
         messages: [{
           role: 'user',
           content: [
             { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: body.pdf } },
-            { type: 'text', text: 'Wyciągnij i sklasyfikuj wszystkie transakcje z tego wyciągu.' },
+            { type: 'text', text: 'Wyciągnij i sklasyfikuj wszystkie transakcje z tego wyciągu. Odpowiedz wyłącznie wywołaniem narzędzia record_transactions.' },
           ],
         }],
       }),
